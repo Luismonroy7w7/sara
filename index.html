@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Una carta para Sara</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{--night:#14192b;--night2:#26325a;--paper:#e9d8a6;--ink:#3b2a1a;--grass:#5b8c33;--dirt:#6b4a2b;--stone:#7d7d7d;--gold:#b89a5a}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{overflow:hidden;background:linear-gradient(var(--night),var(--night2));font-family:"Press Start 2P","Courier New",monospace;color:var(--ink);display:flex;align-items:center;justify-content:center;padding:16px 16px 72px}
+#c{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+.ground{position:fixed;left:0;right:0;bottom:0;height:56px;z-index:1;background:linear-gradient(var(--grass) 0 16px,#4a7228 16px 20px,var(--dirt) 20px);border-top:4px solid #3c5e1f}
+.letter{position:relative;z-index:2;width:min(560px,100%);background:var(--paper);border:4px solid var(--ink);box-shadow:0 0 0 4px var(--gold),10px 10px 0 4px rgba(0,0,0,.4);padding:clamp(22px,6vw,44px) clamp(18px,5vw,40px);text-align:center}
+.letter h1{font-size:clamp(15px,4.4vw,24px);line-height:1.7;margin:0 0 30px;font-weight:400}
+.btns{display:flex;gap:22px;justify-content:center;align-items:center;min-height:60px;flex-wrap:wrap}
+.mc{font:inherit;font-size:clamp(14px,3.6vw,18px);color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.5);padding:16px 30px;border:3px solid #000;cursor:pointer;background:var(--stone);box-shadow:inset -4px -4px 0 #555,inset 4px 4px 0 #b8b8b8}
+.mc:hover{background:#8e8e8e}
+.mc:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.mc.yes{background:var(--grass);box-shadow:inset -4px -4px 0 #3c5e1f,inset 4px 4px 0 #8bc34a}
+.mc.yes:hover{background:#6aa13b}
+.mc.yes.solo{animation:pulse 1.2s steps(2) infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+.mc.fly{position:fixed;z-index:5;margin:0;transition:left .14s ease-out,top .14s ease-out}
+.hint{min-height:2.4em;margin:22px 0 0;font-size:10px;line-height:1.8}
+.reply h2{font-size:clamp(15px,4.4vw,24px);line-height:1.7;margin:0 0 18px;font-weight:400}
+.reply p{font-size:clamp(11px,3vw,14px);line-height:1.9;margin:0}
+.reply b{color:#5865f2}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.mc.yes.solo{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<div class="ground"></div>
+
+<main class="letter" id="letter">
+  <div id="ask">
+    <h1>sara, quieres juegar maicra conmigo?</h1>
+    <div class="btns" id="btns">
+      <button class="mc yes" id="yes">Sí</button>
+      <span id="slot"><button class="mc" id="no">No</button></span>
+    </div>
+    <p class="hint" id="hint" aria-live="polite"></p>
+  </div>
+  <div class="reply" id="reply" hidden aria-live="polite">
+    <h2>¡Sí! Yeeey</h2>
+    <p>Te espero en <b>Discord</b>. Ve tomando tu pico, que vamos a minar.</p>
+  </div>
+</main>
+
+<script>
+(function(){
+  var rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv = document.getElementById('c'), cx = cv.getContext('2d');
+  var W, H;
+  function size(){
+    var d = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * d; cv.height = H * d;
+    cx.setTransform(d, 0, 0, d, 0, 0);
+    cx.imageSmoothingEnabled = false;
+  }
+  size(); addEventListener('resize', size);
+  var R = function(a, b){ return a + Math.random() * (b - a); };
+
+  // Texturas de 8x8 pixeles al estilo Minecraft
+  function make(fn){
+    var c = document.createElement('canvas'); c.width = c.height = 8;
+    var x = c.getContext('2d');
+    for (var py = 0; py < 8; py++) for (var px = 0; px < 8; px++){
+      x.fillStyle = fn(px, py); x.fillRect(px, py, 1, 1);
+    }
+    return c;
+  }
+  var hsl = function(h, s, l, v){ return 'hsl(' + h + ',' + s + '%,' + (l + R(-v, v)) + '%)'; };
+  var dirt = function(){ return make(function(){ return hsl(28, 40, 30, 6); }); };
+  function ore(h, s, l){
+    var spots = {}; for (var i = 0; i < 7; i++) spots[(Math.random() * 8 | 0) + ',' + (Math.random() * 8 | 0)] = 1;
+    return make(function(x, y){ return spots[x + ',' + y] ? hsl(h, s, l, 5) : hsl(0, 0, 50, 7); });
+  }
+  var tex = [
+    make(function(x, y){ return (y < 3 || (y === 3 && Math.random() < .5)) ? hsl(100, 45, 35, 6) : hsl(28, 40, 30, 6); }),
+    dirt(), dirt(),
+    make(function(){ return hsl(0, 0, 50, 7); }),
+    ore(185, 70, 60), ore(46, 90, 55),
+    make(function(x, y){ return (y === 3 || y === 7) ? hsl(30, 45, 33, 3) : hsl(35, 45, 48, 4); }),
+    make(function(x, y){ return (y === 3 || y === 4) ? hsl(0, 0, 92, 3) : hsl(5, 70, 45, 5); })
+  ];
+
+  var blocks = [], rate = rm ? 2 : 7, acc = 0, last = 0;
+  function spawn(){
+    var s = R(18, 44);
+    blocks.push({t: tex[Math.random() * tex.length | 0], x: R(-s, W), y: -s, s: s, vx: R(-12, 12), vy: R(120, 320), g: 0});
+  }
+  function burst(x, y, n){
+    for (var i = 0; i < n; i++){
+      var s = R(9, 18);
+      blocks.push({t: tex[Math.random() * tex.length | 0], x: x, y: y, s: s, vx: R(-240, 240), vy: R(-380, -80), g: 900});
+    }
+  }
+  function frame(t){
+    var dt = Math.min((t - last) / 1000, .05); last = t;
+    acc += dt * rate; while (acc >= 1){ acc--; spawn(); }
+    cx.clearRect(0, 0, W, H);
+    cx.strokeStyle = 'rgba(0,0,0,.35)'; cx.lineWidth = 2;
+    for (var i = blocks.length - 1; i >= 0; i--){
+      var b = blocks[i];
+      b.vy += b.g * dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.y > H + 60){ blocks.splice(i, 1); continue; }
+      cx.drawImage(b.t, b.x, b.y, b.s, b.s);
+      cx.strokeRect(b.x, b.y, b.s, b.s);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(function(t){ last = t; frame(t); });
+
+  // Botones
+  var yes = document.getElementById('yes'), no = document.getElementById('no');
+  var slot = document.getElementById('slot'), hint = document.getElementById('hint');
+  var mx = -999, my = -999, gone = false, flying = false;
+
+  function dodge(){
+    var b = no.getBoundingClientRect(), w = b.width, h = b.height;
+    if (!flying){
+      slot.style.width = w + 'px'; slot.style.height = h + 'px'; slot.style.display = 'inline-block';
+      no.style.left = b.left + 'px'; no.style.top = b.top + 'px';
+      no.classList.add('fly'); flying = true;
+      void no.offsetWidth;
+    }
+    var nx, ny, n = 0;
+    do {
+      nx = R(12, W - w - 12); ny = R(12, H - h - 70);
+      n++;
+    } while (Math.hypot(nx + w / 2 - mx, ny + h / 2 - my) < 220 && n < 40);
+    no.style.left = nx + 'px'; no.style.top = ny + 'px';
+  }
+  function near(){
+    var b = no.getBoundingClientRect();
+    var cxm = b.left + b.width / 2, cym = b.top + b.height / 2;
+    return Math.hypot(mx - cxm, my - cym) < Math.max(b.width, b.height) / 2 + 70;
+  }
+  function track(e){
+    if (gone) return;
+    mx = e.clientX; my = e.clientY;
+    if (near()) dodge();
+  }
+  addEventListener('pointermove', track);
+  addEventListener('pointerdown', track, true);
+
+  no.addEventListener('click', function(){
+    if (gone) return;
+    gone = true;
+    var b = no.getBoundingClientRect();
+    burst(b.left + b.width / 2, b.top + b.height / 2, 22);
+    no.remove(); slot.remove();
+    yes.classList.add('solo');
+    hint.textContent = 'ups, el no se rompió. solo queda el sí.';
+  });
+
+  yes.addEventListener('click', function(){
+    var b = yes.getBoundingClientRect();
+    burst(b.left + b.width / 2, b.top + b.height / 2, 40);
+    if (!gone){ gone = true; no.remove(); slot.remove(); }
+    document.getElementById('ask').hidden = true;
+    document.getElementById('reply').hidden = false;
+    rate = rm ? 10 : 40;
+  });
+})();
+</script>
+</body>
+</html>
